@@ -1,0 +1,17 @@
+# Per-task virtual environments (rebuild with: uv venv && uv pip install -r <task>/requirements.txt)
+*/.venv/
+.uv_cache/
+
+# Python
+__pycache__/
+*.pyc
+
+# Machine-local, not portable (path is specific to this host)
+.env.shared
+
+# Run logs (regenerated every run_all.sh invocation)
+logs/*.log
+
+# OS/editor noise
+.DS_Store
+*.swp

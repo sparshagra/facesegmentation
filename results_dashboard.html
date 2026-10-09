@@ -1,0 +1,639 @@
+<title>Face Anonymization Benchmark</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1: #2a78d6; /* Task 1 — RetinaFace + MediaPipe */
+    --series-2: #eb6834; /* Task 2 — SCRFD + SegFace */
+    --series-3: #1baf7a; /* Task 3 — YOLO11n + MobileSAM */
+    --series-4: #eda100; /* Task 4 — YOLOv5n + MediaPipe */
+    --series-1-wash: rgba(42,120,214,0.10);
+    --series-2-wash: rgba(235,104,52,0.10);
+    --series-3-wash: rgba(27,175,122,0.10);
+    --series-4-wash: rgba(237,161,0,0.10);
+    --good: #0ca30c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-1-wash: rgba(57,135,229,0.14);
+      --series-2-wash: rgba(217,89,38,0.14);
+      --series-3-wash: rgba(25,158,112,0.14);
+      --series-4-wash: rgba(201,133,0,0.14);
+      --good: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-1-wash: rgba(57,135,229,0.14);
+    --series-2-wash: rgba(217,89,38,0.14);
+    --series-3-wash: rgba(25,158,112,0.14);
+    --series-4-wash: rgba(201,133,0,0.14);
+    --good: #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-plane); color: var(--text-primary); }
+  .viz-root {
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    padding: 28px 16px 56px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+  header.page-head { margin-bottom: 24px; }
+  header.page-head h1 {
+    font-size: 26px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  header.page-head p.sub {
+    margin: 0; color: var(--text-secondary); font-size: 14.5px; max-width: 68ch; line-height: 1.5;
+  }
+
+  .stat-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    background: var(--gridline); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; margin: 20px 0 32px;
+  }
+  .stat-tile { background: var(--surface-1); padding: 16px 18px; }
+  .stat-tile .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .stat-tile .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: proportional-nums; }
+  .stat-tile .value .unit { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 3px; }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px 22px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15.5px; font-weight: 650; margin: 0 0 2px; }
+  .card p.note { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 16px; line-height: 1.5; max-width: 72ch; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 18px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
+  .chart-wrap { position: relative; width: 100%; overflow-x: auto; }
+  svg.chart { display: block; width: 100%; height: auto; }
+  .axis-label { fill: var(--text-muted); font-size: 10.5px; font-family: "IBM Plex Mono", monospace; }
+  .grid-line { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .bar { cursor: pointer; }
+  .bar:hover { filter: brightness(1.08); }
+  .cat-label { fill: var(--text-secondary); font-size: 11.5px; }
+  .group-label { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 50;
+    background: var(--text-primary); color: var(--surface-1);
+    font-size: 12px; padding: 7px 10px; border-radius: 7px; line-height: 1.45;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    opacity: 0; transition: opacity 0.08s ease; max-width: 240px;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .t-title { font-weight: 650; margin-bottom: 2px; }
+  .tooltip .t-row { display: flex; justify-content: space-between; gap: 12px; opacity: 0.88; }
+
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.data-table th, table.data-table td {
+    text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; font-variant-numeric: normal; }
+  table.data-table thead th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  table.data-table tbody tr:last-child td { border-bottom: none; }
+  .table-scroll { overflow-x: auto; }
+
+  .toggle-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .toggle-btn {
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+    background: transparent; border: 1px solid var(--border); border-radius: 7px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .toggle-btn.active { color: var(--text-primary); background: var(--gridline); border-color: var(--baseline); }
+
+  .heatmap-table { width: 100%; border-collapse: separate; border-spacing: 2px; font-size: 12px; }
+  .heatmap-table th { font-size: 11px; color: var(--text-muted); font-weight: 600; padding: 6px 8px; text-align: center; }
+  .heatmap-table th.row-head { text-align: left; }
+  .heatmap-table td.row-head { text-align: left; color: var(--text-secondary); font-size: 12px; padding: 8px 10px; white-space: nowrap; }
+  .heatmap-cell { text-align: center; padding: 10px 6px; border-radius: 6px; font-variant-numeric: tabular-nums; font-weight: 600; cursor: default; }
+
+  .finding {
+    font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin: 0 0 10px;
+    padding-left: 14px; border-left: 2px solid var(--gridline);
+  }
+  .finding b { color: var(--text-primary); font-weight: 650; }
+  .finding .mono { color: var(--text-primary); }
+
+  footer.page-foot { margin-top: 28px; font-size: 11.5px; color: var(--text-muted); line-height: 1.6; }
+
+  @media (max-width: 640px) {
+    .stat-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="viz-root">
+  <header class="page-head">
+    <h1>Face Anonymization Pipeline Benchmark</h1>
+    <p class="sub">4 face-detection + masking + anonymization pipelines, scored against hand-annotated ground-truth
+      masks on a 98-image test set spanning 7 challenge categories, plus a YOLOX-s person detector run on every
+      anonymized output to check for downstream-detection degradation.</p>
+  </header>
+
+  <div class="stat-strip">
+    <div class="stat-tile"><div class="label">Images</div><div class="value">98</div></div>
+    <div class="stat-tile"><div class="label">Categories</div><div class="value">7</div></div>
+    <div class="stat-tile"><div class="label">GT faces</div><div class="value">157</div></div>
+    <div class="stat-tile"><div class="label">Pipelines</div><div class="value">4</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Mask agreement with ground truth</h2>
+    <p class="note">Whole-mask IoU treats a large correct interior the same as a precise boundary, so it under-
+      distinguishes these pipelines. Boundary IoU and Boundary F1 (3px tolerance) score contour agreement directly —
+      note SegFace and MobileSAM's pixel-level masks pull ahead of the landmark-hull pipelines once boundaries are
+      scored on their own.</p>
+    <div class="legend" id="legend-main"></div>
+    <div class="chart-wrap"><svg class="chart" id="chart-quality" viewBox="0 0 1100 320" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="card">
+    <h2>Downstream detector retention — YOLOX-s (COCO person)</h2>
+    <p class="note">Of 412 people YOLOX found in the original images, how many did it still find after each
+      pipeline anonymized the faces? A lower bar means the anonymization step cost you more downstream detections.</p>
+    <div class="chart-wrap"><svg class="chart" id="chart-retention" viewBox="0 0 1100 220" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="card">
+    <h2>Per-image latency</h2>
+    <p class="note">Mean wall-clock time per image, split by stage (face detection → mask generation → anonymize).
+      Measured on a shared RTX A6000 with ~2–10GB free VRAM; SCRFD + SegFace's tiny ONNX detector makes Task 2
+      the fastest pipeline despite running the heaviest mask model.</p>
+    <div class="chart-wrap"><svg class="chart" id="chart-latency" viewBox="0 0 1100 260" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="card">
+    <h2>Boundary F1 by test category</h2>
+    <p class="note">Same metric, broken down by challenge scenario. Darker = better boundary agreement with ground
+      truth. Every pipeline drops sharply on <span class="mono">03_huge_close_face</span> — extreme close-ups push
+      faces past what these mask stages were tuned for.</p>
+    <div class="table-scroll">
+      <table class="heatmap-table" id="heatmap"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="findings-head">Reading the results</h2>
+    <div id="findings"></div>
+  </div>
+
+  <div class="card">
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btn-table">Full metrics table</button>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table" id="full-table"></table>
+    </div>
+  </div>
+
+  <footer class="page-foot">
+    Dataset: <span class="mono">combined_final</span> (98 images / 157 GT face annotations / 7 categories),
+    COCO-polygon ground truth. Boundary IoU dilation ratio 2% of image diagonal; Boundary F1 tolerance 3px.
+    YOLOX retention is micro-averaged (total persons retained ÷ total persons in originals, 412 across 98 images).
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function () {
+  const PIPELINES = [
+    { id: "task1", name: "RetinaFace + MediaPipe", short: "T1 RetinaFace", var: "--series-1" },
+    { id: "task2", name: "SCRFD + SegFace", short: "T2 SCRFD", var: "--series-2" },
+    { id: "task3", name: "YOLO11n + MobileSAM", short: "T3 YOLO11n", var: "--series-3" },
+    { id: "task4", name: "YOLOv5n + MediaPipe", short: "T4 YOLOv5n", var: "--series-4" },
+  ];
+
+  const OVERALL = {
+    task1: { mask_iou: 0.6448, boundary_iou: 0.5751, boundary_f1: 0.4273,
+              retention: 0.9272, conf_delta: -0.00402, lost: 30,
+              detect_ms: 323.0, mask_ms: 41.6, anon_ms: 101.1 },
+    task2: { mask_iou: 0.6489, boundary_iou: 0.6116, boundary_f1: 0.5698,
+              retention: 0.9393, conf_delta: -0.00373, lost: 25,
+              detect_ms: 44.5, mask_ms: 61.0, anon_ms: 97.1 },
+    task3: { mask_iou: 0.6080, boundary_iou: 0.5756, boundary_f1: 0.5777,
+              retention: 0.9175, conf_delta: -0.00976, lost: 34,
+              detect_ms: 45.3, mask_ms: 79.0, anon_ms: 188.8 },
+    task4: { mask_iou: 0.6078, boundary_iou: 0.5352, boundary_f1: 0.3908,
+              retention: 0.9272, conf_delta: -0.00462, lost: 30,
+              detect_ms: 50.6, mask_ms: 36.5, anon_ms: 152.6 },
+  };
+
+  const CATEGORIES = ["01_general","02_tiny_face","03_huge_close_face","04_pose_variation",
+                       "05_occlusion","06_multiface_mixed_scale","07_challenging_lighting"];
+  const CAT_LABELS = {
+    "01_general":"General", "02_tiny_face":"Tiny face", "03_huge_close_face":"Huge close-up",
+    "04_pose_variation":"Pose variation", "05_occlusion":"Occlusion",
+    "06_multiface_mixed_scale":"Multi-face mixed scale", "07_challenging_lighting":"Challenging lighting"
+  };
+
+  const BOUNDARY_F1_BY_CAT = {
+    task1: {"01_general":0.4657,"02_tiny_face":0.7369,"03_huge_close_face":0.2858,"04_pose_variation":0.3457,"05_occlusion":0.2794,"06_multiface_mixed_scale":0.4266,"07_challenging_lighting":0.4099},
+    task2: {"01_general":0.7740,"02_tiny_face":0.5871,"03_huge_close_face":0.4042,"04_pose_variation":0.5553,"05_occlusion":0.5217,"06_multiface_mixed_scale":0.6914,"07_challenging_lighting":0.5110},
+    task3: {"01_general":0.7336,"02_tiny_face":0.5076,"03_huge_close_face":0.4976,"04_pose_variation":0.5056,"05_occlusion":0.6701,"06_multiface_mixed_scale":0.6607,"07_challenging_lighting":0.5878},
+    task4: {"01_general":0.4751,"02_tiny_face":0.5024,"03_huge_close_face":0.2823,"04_pose_variation":0.3172,"05_occlusion":0.3614,"06_multiface_mixed_scale":0.4123,"07_challenging_lighting":0.4141},
+  };
+
+  const root = document.querySelector(".viz-root");
+  const cs = getComputedStyle(root);
+  const seriesColor = (p) => cs.getPropertyValue(p.var).trim() || "#888";
+
+  const tooltip = document.getElementById("tooltip");
+  function showTip(evt, html) {
+    tooltip.innerHTML = html;
+    tooltip.classList.add("show");
+    moveTip(evt);
+  }
+  function moveTip(evt) {
+    const pad = 14;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    const tw = 240, th = 90;
+    if (x + tw > window.innerWidth) x = evt.clientX - tw - pad;
+    if (y + th > window.innerHeight) y = evt.clientY - th - pad;
+    tooltip.style.left = x + "px";
+    tooltip.style.top = y + "px";
+  }
+  function hideTip() { tooltip.classList.remove("show"); }
+
+  const svgns = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const e = document.createElementNS(svgns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // 4px rounded top corners, square at the baseline — the mark spec for
+  // bars/columns. Falls back to a plain rect path when h is too short for
+  // the radius to read cleanly.
+  function roundedTopRectPath(x, y, w, h, r) {
+    r = Math.min(r, w / 2, Math.max(h, 0));
+    if (h <= 0) return `M${x},${y} h${w} v0 h${-w} Z`;
+    if (r <= 0) return `M${x},${y} h${w} v${h} h${-w} Z`;
+    return `M${x},${y + r}
+            a${r},${r} 0 0 1 ${r},${-r}
+            h${w - 2 * r}
+            a${r},${r} 0 0 1 ${r},${r}
+            v${h - r}
+            h${-w}
+            Z`;
+  }
+
+  // ---------- Legend (shared) ----------
+  const legendMain = document.getElementById("legend-main");
+  PIPELINES.forEach(p => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = `<span class="legend-swatch" style="background:${seriesColor(p)}"></span>${p.name}`;
+    legendMain.appendChild(item);
+  });
+
+  // ---------- Chart A: quality grouped bars (3 metric groups x 4 pipelines) ----------
+  (function () {
+    const svg = document.getElementById("chart-quality");
+    const W = 1100, H = 320;
+    const marginL = 44, marginR = 16, marginT = 16, marginB = 46;
+    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+    const metrics = [
+      { key: "mask_iou", label: "Mask IoU (whole mask)" },
+      { key: "boundary_iou", label: "Boundary IoU (2% band)" },
+      { key: "boundary_f1", label: "Boundary F1 (3px tol.)" },
+    ];
+    const groupW = plotW / metrics.length;
+    const barW = 24, gap = 2;
+    const barsPerGroup = PIPELINES.length;
+    const clusterW = barsPerGroup * barW + (barsPerGroup - 1) * gap;
+
+    const yMax = 1.0;
+    const y = v => marginT + plotH - (v / yMax) * plotH;
+
+    // gridlines + y labels
+    [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+      svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(v), y2: y(v), class: "grid-line" }));
+      const t = el("text", { x: marginL - 8, y: y(v) + 3, class: "axis-label", "text-anchor": "end" });
+      t.textContent = v.toFixed(2);
+      svg.appendChild(t);
+    });
+    svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(0), y2: y(0), class: "baseline" }));
+
+    metrics.forEach((m, gi) => {
+      const groupX0 = marginL + gi * groupW;
+      const clusterX0 = groupX0 + (groupW - clusterW) / 2;
+
+      const label = el("text", { x: groupX0 + groupW / 2, y: H - marginB + 22, class: "group-label", "text-anchor": "middle" });
+      label.textContent = m.label;
+      svg.appendChild(label);
+
+      PIPELINES.forEach((p, pi) => {
+        const v = OVERALL[p.id][m.key];
+        const x = clusterX0 + pi * (barW + gap);
+        const barH = plotH - (y(v) - marginT);
+        const h1 = Math.max(barH, 1);
+        const rect = el("path", {
+          d: roundedTopRectPath(x, y(v), barW, h1, 4),
+          fill: seriesColor(p), class: "bar",
+        });
+        svg.appendChild(rect);
+        rect.addEventListener("mousemove", (e) => showTip(e,
+          `<div class="t-title">${p.name}</div><div class="t-row"><span>${m.label}</span><span>${v.toFixed(3)}</span></div>`));
+        rect.addEventListener("mouseleave", hideTip);
+
+        // direct label on the tallest bar in each group only (selective labeling)
+        const maxInGroup = Math.max(...PIPELINES.map(pp => OVERALL[pp.id][m.key]));
+        if (v === maxInGroup) {
+          const lab = el("text", { x: x + barW / 2, y: y(v) - 6, class: "axis-label", "text-anchor": "middle" });
+          lab.textContent = v.toFixed(2);
+          lab.style.fill = "var(--text-secondary)";
+          svg.appendChild(lab);
+        }
+      });
+    });
+  })();
+
+  // ---------- Chart B: retention rate ----------
+  (function () {
+    const svg = document.getElementById("chart-retention");
+    const W = 1100, H = 220;
+    const marginL = 44, marginR = 16, marginT = 16, marginB = 40;
+    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+    const barW = 90, gap = 28;
+    const totalW = PIPELINES.length * barW + (PIPELINES.length - 1) * gap;
+    const x0 = marginL + (plotW - totalW) / 2;
+
+    const yMin = 0.85, yMax = 1.0;
+    const y = v => marginT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+    [0.85, 0.90, 0.95, 1.00].forEach(v => {
+      svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(v), y2: y(v), class: "grid-line" }));
+      const t = el("text", { x: marginL - 8, y: y(v) + 3, class: "axis-label", "text-anchor": "end" });
+      t.textContent = (v * 100).toFixed(0) + "%";
+      svg.appendChild(t);
+    });
+    svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(yMin), y2: y(yMin), class: "baseline" }));
+
+    PIPELINES.forEach((p, i) => {
+      const v = OVERALL[p.id].retention;
+      const x = x0 + i * (barW + gap);
+      const barH = plotH - (y(v) - marginT);
+      const h2 = Math.max(barH, 1);
+      const rect = el("path", { d: roundedTopRectPath(x, y(v), barW, h2, 4), fill: seriesColor(p), class: "bar" });
+      svg.appendChild(rect);
+      const d = OVERALL[p.id];
+      rect.addEventListener("mousemove", (e) => showTip(e,
+        `<div class="t-title">${p.name}</div>
+         <div class="t-row"><span>Retention</span><span>${(v*100).toFixed(1)}%</span></div>
+         <div class="t-row"><span>Conf. delta</span><span>${d.conf_delta.toFixed(4)}</span></div>
+         <div class="t-row"><span>Lost detections</span><span>${d.lost}</span></div>`));
+      rect.addEventListener("mouseleave", hideTip);
+
+      const valLab = el("text", { x: x + barW / 2, y: y(v) - 8, class: "axis-label", "text-anchor": "middle" });
+      valLab.textContent = (v * 100).toFixed(1) + "%";
+      valLab.style.fill = "var(--text-secondary)";
+      svg.appendChild(valLab);
+
+      const nameLab = el("text", { x: x + barW / 2, y: H - marginB + 18, class: "cat-label", "text-anchor": "middle" });
+      nameLab.textContent = p.short;
+      svg.appendChild(nameLab);
+    });
+  })();
+
+  // ---------- Chart C: latency stacked bars ----------
+  (function () {
+    const svg = document.getElementById("chart-latency");
+    const W = 1100, H = 260;
+    const marginL = 54, marginR = 16, marginT = 16, marginB = 40;
+    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+    const barW = 90, gap = 28;
+    const totalW = PIPELINES.length * barW + (PIPELINES.length - 1) * gap;
+    const x0 = marginL + (plotW - totalW) / 2;
+
+    const totals = PIPELINES.map(p => OVERALL[p.id].detect_ms + OVERALL[p.id].mask_ms + OVERALL[p.id].anon_ms);
+    const yMax = Math.ceil(Math.max(...totals) / 100) * 100;
+    const y = v => marginT + plotH - (v / yMax) * plotH;
+
+    const ticks = [0, yMax * 0.25, yMax * 0.5, yMax * 0.75, yMax];
+    ticks.forEach(v => {
+      svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(v), y2: y(v), class: "grid-line" }));
+      const t = el("text", { x: marginL - 8, y: y(v) + 3, class: "axis-label", "text-anchor": "end" });
+      t.textContent = Math.round(v) + "ms";
+      svg.appendChild(t);
+    });
+    svg.appendChild(el("line", { x1: marginL, x2: W - marginR, y1: y(0), y2: y(0), class: "baseline" }));
+
+    const stages = [
+      { key: "detect_ms", label: "Detect", opacity: 1.0 },
+      { key: "mask_ms", label: "Mask", opacity: 0.68 },
+      { key: "anon_ms", label: "Anonymize", opacity: 0.4 },
+    ];
+
+    PIPELINES.forEach((p, i) => {
+      const x = x0 + i * (barW + gap);
+      let cursor = 0;
+      const d = OVERALL[p.id];
+      stages.forEach((s) => {
+        const v = d[s.key];
+        const yTop = y(cursor + v);
+        const yBot = y(cursor);
+        const h = Math.max(yBot - yTop - (s.key !== "detect_ms" ? 2 : 0), 1);
+        const isTopSegment = s.key === "anon_ms";
+        const rect = isTopSegment
+          ? el("path", { d: roundedTopRectPath(x, yTop, barW, h, 4), fill: seriesColor(p), opacity: s.opacity, class: "bar" })
+          : el("rect", { x, y: yTop, width: barW, height: h, fill: seriesColor(p), opacity: s.opacity, class: "bar" });
+        svg.appendChild(rect);
+        rect.addEventListener("mousemove", (e) => showTip(e,
+          `<div class="t-title">${p.name}</div><div class="t-row"><span>${s.label}</span><span>${v.toFixed(1)}ms</span></div>
+           <div class="t-row"><span>Total</span><span>${(d.detect_ms+d.mask_ms+d.anon_ms).toFixed(0)}ms</span></div>`));
+        rect.addEventListener("mouseleave", hideTip);
+        cursor += v;
+      });
+      const totLab = el("text", { x: x + barW / 2, y: y(cursor) - 8, class: "axis-label", "text-anchor": "middle" });
+      totLab.textContent = Math.round(cursor) + "ms";
+      totLab.style.fill = "var(--text-secondary)";
+      svg.appendChild(totLab);
+
+      const nameLab = el("text", { x: x + barW / 2, y: H - marginB + 18, class: "cat-label", "text-anchor": "middle" });
+      nameLab.textContent = p.short;
+      svg.appendChild(nameLab);
+    });
+
+    // stage legend
+    const legendY = marginT;
+    let lx = W - marginR - 220;
+  })();
+
+  // stage legend under latency chart (HTML, simpler than SVG)
+  (function () {
+    const card = document.getElementById("chart-latency").closest(".card");
+    const leg = document.createElement("div");
+    leg.className = "legend";
+    leg.style.marginTop = "-4px";
+    leg.innerHTML = `
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--text-muted);opacity:1"></span>Detect (full opacity)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--text-muted);opacity:0.68"></span>Mask (68%)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--text-muted);opacity:0.4"></span>Anonymize (40%)</div>
+      <div class="legend-item" style="margin-left:auto;color:var(--text-muted)">stage color = pipeline hue, opacity = stage</div>
+    `;
+    card.insertBefore(leg, card.querySelector(".chart-wrap"));
+  })();
+
+  // ---------- Heatmap: boundary F1 by category ----------
+  (function () {
+    const table = document.getElementById("heatmap");
+    const allVals = [];
+    CATEGORIES.forEach(c => PIPELINES.forEach(p => allVals.push(BOUNDARY_F1_BY_CAT[p.id][c])));
+    const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+
+    function shade(v) {
+      const t = (v - vMin) / (vMax - vMin || 1);
+      // blue sequential ramp, light->dark per palette.md steps 150..550
+      const stops = ["#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab"];
+      const idx = Math.min(stops.length - 1, Math.floor(t * stops.length));
+      return stops[idx];
+    }
+    function textColor(v) {
+      const t = (v - vMin) / (vMax - vMin || 1);
+      return t > 0.45 ? "#ffffff" : "#0b0b0b";
+    }
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    htr.appendChild(Object.assign(document.createElement("th"), { className: "row-head", textContent: "Category" }));
+    PIPELINES.forEach(p => htr.appendChild(Object.assign(document.createElement("th"), { textContent: p.short })));
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    CATEGORIES.forEach(c => {
+      const tr = document.createElement("tr");
+      const rowHead = document.createElement("td");
+      rowHead.className = "row-head";
+      rowHead.textContent = CAT_LABELS[c];
+      tr.appendChild(rowHead);
+      PIPELINES.forEach(p => {
+        const v = BOUNDARY_F1_BY_CAT[p.id][c];
+        const td = document.createElement("td");
+        const cell = document.createElement("div");
+        cell.className = "heatmap-cell";
+        cell.style.background = shade(v);
+        cell.style.color = textColor(v);
+        cell.textContent = v.toFixed(2);
+        cell.addEventListener("mousemove", (e) => showTip(e,
+          `<div class="t-title">${p.name}</div><div class="t-row"><span>${CAT_LABELS[c]}</span><span>Boundary F1 ${v.toFixed(3)}</span></div>`));
+        cell.addEventListener("mouseleave", hideTip);
+        td.appendChild(cell);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  })();
+
+  // ---------- Findings ----------
+  (function () {
+    const box = document.getElementById("findings");
+    const findings = [
+      `<b>Boundary metrics separate the pipelines; whole-mask IoU doesn't.</b> Mask IoU sits in a tight
+       <span class="mono">0.608–0.649</span> band for all four pipelines — hard to call a winner. Boundary F1 spreads
+       from <span class="mono">0.391</span> (Task 4) to <span class="mono">0.578</span> (Task 3), a 48% relative gap the
+       whole-mask number never shows.`,
+      `<b>Pixel-level masks beat landmark hulls on boundary agreement.</b> SegFace (Task 2, 0.570) and MobileSAM
+       (Task 3, 0.578) score well ahead of the two MediaPipe-hull pipelines (Task 1, 0.427; Task 4, 0.391) — a
+       468-point convex hull is a polygon approximation of the face, and it shows up specifically at the boundary,
+       not in the interior.`,
+      `<b>Every pipeline struggles on huge close-up faces</b> (<span class="mono">03_huge_close_face</span>):
+       Boundary F1 drops to <span class="mono">0.28–0.50</span> across the board, the worst category for 3 of 4
+       pipelines — an extreme-closeup face exceeds the crop margins these mask stages were tuned around.`,
+      `<b>Downstream retention stays high everywhere</b> (91.7–93.9%), but Task 3's pixelation costs the most
+       confidence on detections it does keep (mean delta <span class="mono">−0.0098</span>, over 2× the other
+       three) — consistent with pixelation altering more local pixel structure than a smooth blur.`,
+      `<b>Task 2 (SCRFD + SegFace) is the fastest pipeline</b> at 203ms/image despite running the heaviest mask
+       model — SCRFD's ~3MB ONNX detector is roughly 7× faster than RetinaFace-R50's ResNet-50 backbone
+       (323ms vs. 45ms detect time), and that gap dominates the per-image total.`,
+    ];
+    findings.forEach(f => {
+      const p = document.createElement("p");
+      p.className = "finding";
+      p.innerHTML = f;
+      box.appendChild(p);
+    });
+  })();
+
+  // ---------- Full metrics table ----------
+  (function () {
+    const table = document.getElementById("full-table");
+    const cols = [
+      { k: "name", h: "Pipeline" },
+      { k: "mask_iou", h: "Mask IoU", fmt: v => v.toFixed(3) },
+      { k: "boundary_iou", h: "Boundary IoU", fmt: v => v.toFixed(3) },
+      { k: "boundary_f1", h: "Boundary F1", fmt: v => v.toFixed(3) },
+      { k: "retention", h: "YOLOX retention", fmt: v => (v*100).toFixed(1) + "%" },
+      { k: "conf_delta", h: "Conf. delta", fmt: v => v.toFixed(4) },
+      { k: "lost", h: "Lost dets.", fmt: v => String(v) },
+      { k: "total_ms", h: "Total ms/img", fmt: v => v.toFixed(0) },
+    ];
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    cols.forEach(c => htr.appendChild(Object.assign(document.createElement("th"), { textContent: c.h })));
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    PIPELINES.forEach(p => {
+      const d = OVERALL[p.id];
+      const row = { ...d, name: p.name, total_ms: d.detect_ms + d.mask_ms + d.anon_ms };
+      const tr = document.createElement("tr");
+      cols.forEach(c => {
+        const td = document.createElement("td");
+        td.textContent = c.k === "name" ? row.name : (c.fmt ? c.fmt(row[c.k]) : row[c.k]);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  })();
+
+  document.addEventListener("mousemove", (e) => {
+    if (tooltip.classList.contains("show")) moveTip(e);
+  });
+})();
+</script>

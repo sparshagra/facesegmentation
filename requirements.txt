@@ -1,0 +1,44 @@
+# Top-level overview only. Each pipeline runs in its OWN isolated virtual
+# environment (see Environments in README.md) — install from the per-task
+# file, not this one, if you want to actually run a specific pipeline:
+#   task1_retinaface_mediapipe/requirements.txt
+#   task2_scrfd_segface/requirements.txt
+#   task3_yolo11n_mobilesam/requirements.txt
+#   task4_yolov5n_mediapipe/requirements.txt
+#   task5_yolox_eval/requirements.txt
+#
+# This file lists the shared core (identical pinned versions across all 5
+# envs) plus each pipeline's distinguishing dependency, for a quick read of
+# what the whole project needs in total.
+#
+# All torch/torchvision wheels are the +cu121 build:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+
+# --- shared core (same pinned version in every task's venv) ---
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+numpy==2.2.6
+opencv-python-headless==5.0.0.93
+scipy==1.15.3
+matplotlib==3.10.9
+pillow==12.3.0
+tqdm==4.70.1
+
+# --- task1_retinaface_mediapipe: face mesh landmarks -> convex-hull mask ---
+mediapipe==1.0.1
+
+# --- task2_scrfd_segface: SCRFD detector (via insightface) + 19-class parser ---
+insightface==2.0
+onnxruntime-gpu==1.23.2
+timm==1.0.29
+
+# --- task3_yolo11n_mobilesam: YOLO detector + SAM box-prompt mask ---
+ultralytics==8.4.154
+# mobile_sam installed editable from task3_yolo11n_mobilesam/vendor/
+
+# --- task4_yolov5n_mediapipe: YOLOv5-face detector (vendored) + face mesh ---
+# (mediapipe pinned above; YOLOv5-face itself is vendored, not pip-installed)
+
+# --- task5_yolox_eval: downstream person-detector retention check ---
+yolox==0.3.0
+pycocotools==2.0.11
